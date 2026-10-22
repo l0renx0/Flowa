@@ -105,7 +105,7 @@ svg { display: block; }
 @media (min-width: 900px) {
   .main { max-width: 1040px; padding: 32px 40px 48px 280px; }
   .tabs {
-    top: 0; right: auto; width: 236px; height: auto; flex-direction: column; justify-content: flex-start; gap: 4px;
+    top: 0; bottom: 0; right: auto; width: 236px; height: auto; flex-direction: column; justify-content: flex-start; gap: 4px;
     padding: 28px 16px; border-top: 0; border-right: 1px solid var(--line); background: var(--surface);
   }
   .tabs__brand { order: -2; display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -.03em; padding: 0 10px 22px; }
@@ -184,7 +184,7 @@ svg { display: block; }
 
 /* ---------- Grafici ---------- */
 .chart { position: relative; }
-.chart svg { width: 100%; height: auto; overflow: visible; }
+.chart svg { width: 100%; height: auto; max-height: 300px; overflow: visible; }
 .chart .ax { fill: var(--ink-3); font-size: 10.5px; font-family: var(--font); }
 .chart .ax-today { fill: var(--ink); font-weight: 600; }
 .chart .grid-l { stroke: var(--line); stroke-width: 1; }
@@ -417,3 +417,58 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; }
 @media (min-width: 900px) { .toast { bottom: 28px; left: calc(50% + 118px); } }
 
 .confetti { position: fixed; pointer-events: none; z-index: 70; width: 8px; height: 8px; border-radius: 2px; }
+
+/* ---------- Panoramica ---------- */
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kpi { background: var(--surface); border-radius: 18px; padding: 12px 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpi b { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.kpi--main { grid-column: 1 / -1; padding: 16px 18px; background: linear-gradient(135deg, var(--accent-soft), transparent 75%), var(--surface); }
+.kpi--main b { font-size: 34px; letter-spacing: -.04em; }
+.kpi--main .pill { align-self: flex-start; margin-top: 6px; white-space: normal; }
+@media (min-width: 900px) { .kpis { grid-template-columns: 2fr 1fr 1fr 1fr 1fr; } .kpi--main { grid-column: auto; } }
+.forecast { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; margin-bottom: 14px; border-radius: 16px; background: var(--surface-2); }
+.forecast b { display: block; font-size: 26px; font-weight: 600; letter-spacing: -.035em; }
+.insights { display: grid; gap: 8px; }
+@media (min-width: 900px) { .insights { grid-template-columns: 1fr 1fr; } }
+.insight { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); }
+.insight p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+.insight p b { color: var(--ink); font-weight: 600; }
+.insight__ic { font-size: 20px; line-height: 1.2; flex: none; }
+.insight--good { background: var(--income-soft); }
+.insight--bad { background: var(--danger-soft); }
+.hm { display: grid; gap: 4px; }
+.hm--month { grid-template-columns: repeat(7, 1fr); }
+.hm--weeks { grid-auto-flow: row; gap: 2px; }
+.hm__h { font-size: 10.5px; color: var(--ink-3); text-align: center; font-weight: 500; padding-bottom: 2px; }
+.hm__c { aspect-ratio: 1; border-radius: 7px; display: grid; place-items: center; font-size: 11px; font-weight: 500; color: var(--ink-2); background: var(--surface-2); }
+.hm--weeks .hm__c { border-radius: 3px; }
+.hm__c[data-l="1"] { background: color-mix(in srgb, var(--accent) 22%, var(--surface-2)); }
+.hm__c[data-l="2"] { background: color-mix(in srgb, var(--accent) 45%, var(--surface-2)); }
+.hm__c[data-l="3"] { background: color-mix(in srgb, var(--accent) 70%, var(--surface-2)); color: #fff; }
+.hm__c[data-l="4"] { background: var(--accent); color: #fff; }
+.hm__c--empty { background: transparent; }
+.hm__c--future { opacity: .4; }
+.hm__c.hit { cursor: pointer; }
+.hm__legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 10px; font-size: 11px; color: var(--ink-3); }
+.hm__legend .hm__c { width: 12px; border-radius: 3px; }
+.hm__legend span:first-child { margin-right: 2px; } .hm__legend span:last-child { margin-left: 2px; }
+.cmp { display: flex; flex-direction: column; }
+.cmp__row { display: flex; align-items: center; gap: 12px; padding: 8px 2px; border-bottom: 1px solid var(--line); text-align: left; width: 100%; }
+.cmp__row:last-child { border-bottom: 0; }
+.cmp__name { flex: 1; display: flex; flex-direction: column; font-weight: 500; font-size: 14px; min-width: 0; }
+.split2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.split2 > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.split2 b { font-size: 18px; font-weight: 600; }
+.seg--full button { white-space: nowrap; }
+
+/* ---------- Avviso doppione ---------- */
+.dialog { position: fixed; inset: 0; z-index: 65; display: grid; place-items: center; padding: 20px; }
+.dialog__bg { position: absolute; inset: 0; background: rgba(5, 5, 12, .5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); animation: bd .2s ease both; }
+.dialog__box { position: relative; width: 100%; max-width: 380px; background: var(--surface); border-radius: 26px; padding: 22px 20px 14px; box-shadow: var(--shadow-lg); text-align: center; animation: pop .32s cubic-bezier(.2, .9, .3, 1.25) both; }
+@keyframes pop { from { opacity: 0; transform: scale(.88); } }
+.dialog__ic { width: 56px; height: 56px; margin: 0 auto 10px; border-radius: 18px; display: grid; place-items: center; font-size: 28px; background: color-mix(in srgb, var(--warn) 18%, transparent); }
+.dialog__box h3 { margin: 0 0 6px; font-size: 19px; letter-spacing: -.02em; }
+.dialog__box p { margin: 0 0 12px; color: var(--ink-2); font-size: 14.5px; line-height: 1.45; }
+.dialog__tx { text-align: left; background: var(--surface-2); border-radius: 16px; padding: 2px 6px; margin-bottom: 16px; }
+.dialog__tx .tx { pointer-events: none; }
+.dialog__link { margin-top: 10px; padding: 8px; color: var(--ink-3); font-size: 14px; font-weight: 500; }
