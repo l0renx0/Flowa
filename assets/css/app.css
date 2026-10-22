@@ -472,3 +472,22 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; }
 .dialog__tx { text-align: left; background: var(--surface-2); border-radius: 16px; padding: 2px 6px; margin-bottom: 16px; }
 .dialog__tx .tx { pointer-events: none; }
 .dialog__link { margin-top: 10px; padding: 8px; color: var(--ink-3); font-size: 14px; font-weight: 500; }
+
+/* ---------- Inserimento: calcolatrice, importi recenti, nuova categoria ---------- */
+.amount__expr { min-height: 20px; font-size: 15px; color: var(--ink-3); font-weight: 500; display: flex; justify-content: center; align-items: center; gap: 1px; }
+.amount__expr .caret { height: 15px; }
+.keypad--4 { grid-template-columns: repeat(4, 1fr); }
+.key--op { background: var(--surface-3); font-size: 21px; color: var(--ink-2); }
+.key[data-key="="] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+@media (pointer: fine) and (min-width: 700px) { .keypad--4 { grid-template-columns: repeat(8, 1fr); } }
+.recent { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; margin-top: 6px; font-size: 12.5px; }
+.recent .chip { height: 30px; padding: 0 11px; font-size: 13px; box-shadow: none; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.fact.datewrap { position: relative; }
+.catbtn--new { background: transparent; border: 1.5px dashed var(--surface-3); }
+.catbtn--new .catbtn__ic { background: var(--accent-soft); color: var(--accent); }
+.newcat { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; margin-top: 10px; align-items: center; }
+.newcat .input { height: 42px; font-size: 15px; }
+.newcat #ncIcon { text-align: center; font-size: 20px; padding: 0; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+.sdot[data-s="ok"] { background: var(--income); } .sdot[data-s="err"] { background: var(--danger); } .sdot[data-s="off"] { background: var(--warn); } .sdot[data-s="busy"] { background: var(--accent); }
+.top h1 .num { letter-spacing: -.035em; }

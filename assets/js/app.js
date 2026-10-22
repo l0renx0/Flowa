@@ -2,7 +2,7 @@
 // I dati vivono nel telefono (localStorage) e, se collegato, in un repository GitHub privato.
 'use strict';
 
-const APP_VERSION = 'flowa-3'; // deve coincidere con version.json e con VERSION in sw.js
+const APP_VERSION = 'flowa-4'; // deve coincidere con version.json e con VERSION in sw.js
 const DATA_KEY = 'flowa:data';
 const SYNC_KEY = 'flowa:sync';
 const UI_KEY = 'flowa:ui';
@@ -234,7 +234,10 @@ async function syncNow() {
   }
 }
 function setSync(s) {
+  const was = state.syncStatus;
   state.syncStatus = s;
+  if (route() === 'home' && ['err', 'off'].includes(was) !== ['err', 'off'].includes(s)) renderSoon();
+  if (route() === 'altro') renderSoon();
   document.querySelectorAll('[data-sync]').forEach((el) => { el.dataset.s = s; el.querySelector('span').textContent = syncText(); });
   if (route().startsWith('altro/sync')) renderSoon();
 }
@@ -460,11 +463,12 @@ function viewHome() {
   }
 
   const recent = sortDesc(live().filter((x) => x.date <= t)).slice(0, 6);
+  const todaySpent = sumRange(t, t);
   const catEntries = byCategory(mk + '-01', end, 'expense');
   const empty = !live().length;
 
   return `
-  <header class="top"><div><div class="sub">${cap(dayLabel(t) === 'Oggi' ? WD[parse(t).getDay()] + ' ' + parse(t).getDate() + ' ' + MONTHS[parse(t).getMonth()] : t)}</div><h1>Ciao 👋</h1></div>${syncBadge()}</header>
+  <header class="top"><div><div class="sub">${cap(dayLabel(t) === 'Oggi' ? WD[parse(t).getDay()] + ' ' + parse(t).getDate() + ' ' + MONTHS[parse(t).getMonth()] : t)}</div><h1>${todaySpent ? `Oggi <span class="num">${fmt(todaySpent)}</span>` : 'Oggi zero spese ✨'}</h1></div>${['err', 'off'].includes(state.syncStatus) ? syncBadge() : ''}</header>
   ${empty ? emptyState() : `
   <div class="grid grid--2">
     ${recap}
@@ -935,7 +939,7 @@ function viewAltro(sub) {
   </div>
   <div class="section-t">Dati</div>
   <div class="list">
-    ${item('#/altro/sync', '☁️', 'Sincronizzazione', syncText(), state.sync.token ? '' : 'Da collegare')}
+    ${item('#/altro/sync', '☁️', 'Sincronizzazione', state.sync.lastSync && state.syncStatus === 'ok' ? `Sincronizzato · ${new Date(state.sync.lastSync).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : syncText(), state.sync.token ? `<span class="sdot" data-s="${state.syncStatus}"></span>` : 'Da collegare')}
     ${item('#/altro/backup', '💾', 'Backup ed esportazione', 'Scarica una copia o esporta per Excel')}
   </div>
   <div class="section-t">Aspetto</div>
@@ -1053,17 +1057,24 @@ function openAdd(t = null, preset = {}) {
   $('#toast').hidden = true;
   openSheet(renderAdd(), 'add');
 }
-const draftAmount = () => Number((draft.amt || '0').replace(',', '.')) || 0;
+// L'importo può essere un piccolo calcolo, es. "3,20+4,50-1" (comodo per sommare più scontrini).
+const hasOps = (a) => /[+-]/.test(a || '');
+const draftAmount = () => round2((draft.amt || '').match(/[+-]?[^+-]+/g)?.reduce((s, t) => s + (Number(t.replace(',', '.')) || 0), 0) || 0);
+const fmtTerm = (t) => { const [i, d] = t.split(','); return (i ? Number(i).toLocaleString('it-IT') : '0') + (t.includes(',') ? ',' + (d || '') : ''); };
 function amountHtml() {
-  const [i, d] = (draft.amt || '').split(',');
-  const intFmt = i ? Number(i).toLocaleString('it-IT') : '0';
-  return `<span class="cur">€</span><span class="num">${intFmt}${draft.amt.includes(',') ? ',' + (d || '') : ''}</span><span class="caret"></span>`;
+  const a = draft.amt || '';
+  if (hasOps(a)) {
+    const v = draftAmount();
+    return `<span class="cur">€</span><span class="num">${fmt(Math.abs(v)).replace(/\s?€/, '')}</span>`;
+  }
+  return `<span class="cur">€</span><span class="num">${fmtTerm(a)}</span><span class="caret"></span>`;
 }
+const exprHtml = () => (hasOps(draft.amt) ? `${draft.amt.split(/([+-])/).map((t) => (t === '+' || t === '-' ? ` ${t === '-' ? '−' : '+'} ` : t ? fmtTerm(t) : '')).join('')}<span class="caret"></span> =` : '');
 
 // Suggerimenti: le combinazioni (categoria + negozio, o categoria + nota ripetuta) che usi di più, pesate per quanto sono recenti.
 const normKey = (s) => (s || '').trim().toLowerCase();
 function suggestions(type) {
-  const t0 = parse(today()).getTime();
+  const t0 = parse(today()).getTime(), nowH = new Date().getHours(), nowD = parse(today()).getDay();
   const map = new Map();
   for (const t of live()) {
     if (t.type !== type || t.recurring || t.date > today()) continue;
@@ -1071,7 +1082,10 @@ function suggestions(type) {
     const key = t.category + '|' + normKey(label);
     const days = Math.max(0, (t0 - parse(t.date).getTime()) / 864e5);
     const s = map.get(key) || { key, category: t.category, label, isMerchant: !!t.merchant, score: 0, n: 0, amounts: [], method: null, last: '' };
-    s.score += Math.exp(-days / 75); s.n++;
+    let w = Math.exp(-days / 75);
+    if (t.createdAt) { const dh = Math.abs(new Date(t.createdAt).getHours() - nowH); if (Math.min(dh, 24 - dh) <= 2) w *= 1.6; } // a quest'ora lo fai spesso
+    if (parse(t.date).getDay() === nowD) w *= 1.25;
+    s.score += w; s.n++;
     if (t.date >= s.last) { s.last = t.date; s.method = t.method || s.method; s.label = label || s.label; }
     s.amounts.push([t.date, t.amount]);
     map.set(key, s);
@@ -1096,6 +1110,17 @@ function suggestions(type) {
   return list;
 }
 const suggestionOn = (s) => draft.category === s.category && (s.label ? normKey(s.isMerchant ? draft.merchant : draft.note) === normKey(s.label) : !draft.merchant);
+function recentAmounts() {
+  if (!draft.category) return [];
+  const lab = normKey(draft.merchant || draft.note);
+  const seen = new Set(), out = [];
+  for (const t of sortDesc(live())) {
+    if (t.type !== draft.type || t.category !== draft.category || (lab && normKey(t.merchant || t.note) !== lab)) continue;
+    if (!seen.has(t.amount)) { seen.add(t.amount); out.push(t.amount); }
+    if (out.length >= 3) break;
+  }
+  return out;
+}
 function usualCategory(merchant, type) {
   const n = {}; for (const t of live()) if (t.type === type && normKey(t.merchant) === normKey(merchant)) n[t.category] = (n[t.category] || 0) + 1;
   return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
@@ -1132,23 +1157,25 @@ function renderAmount() {
   const sug = suggestions(d.type);
   const amount = draftAmount();
   const what = c ? d.merchant || d.note || c.name : 'Categoria';
+  const recent = recentAmounts();
   return `
   <div class="add add--p1">
     <div class="sheet__head">
       <div class="seg seg--type"><button class="${!isIn ? 'on' : ''}" data-action="d-type" data-v="expense">Spesa</button><button class="${isIn ? 'on' : ''}" data-action="d-type" data-v="income">Entrata</button></div>
       <button class="x" data-action="close-sheet" aria-label="Chiudi">${ICON.x}</button>
     </div>
-    <div class="amount"><div class="amount__v ${!d.amt ? 'zero' : ''} ${isIn ? 'in' : ''}" id="amt">${amountHtml()}</div>
-      <div class="amount__hint" id="hint">${esc(hintText())}</div></div>
+    <div class="amount"><div class="amount__expr num" id="expr">${exprHtml()}</div><div class="amount__v ${!d.amt ? 'zero' : ''} ${isIn ? 'in' : ''}" id="amt">${amountHtml()}</div>
+      <div class="amount__hint" id="hint">${esc(hintText())}</div>
+      ${recent.length ? `<div class="recent" id="recent" ${d.amt ? 'hidden' : ''}><span class="muted">Le ultime volte:</span>${recent.map((v) => `<button class="chip" data-action="d-amt" data-v="${v}">${fmt(v)}</button>`).join('')}</div>` : ''}</div>
     <div class="facts">
       <button class="fact fact--main ${c ? '' : 'fact--empty'}" data-action="d-page" data-v="2">${c ? icon(c) : '<span class="ic">＋</span>'}<span class="fact__txt">${esc(what)}</span>${ICON.chev}</button>
-      <button class="fact" data-action="d-page" data-v="2"><span>📅 ${shortDate(d.date)}</span></button>
+      <span class="fact datewrap">📅 ${shortDate(d.date)}<input type="date" id="dDate" value="${d.date}" aria-label="Data"></span>
       <button class="fact" data-action="d-method">${METHODS[d.method] || '💳 Metodo'}</button>
     </div>
     ${sug.length ? `<div class="add__label"><span>Suggeriti</span><span class="muted">tocca per compilare</span></div>
     <div class="sugs">${sug.map((s) => { const sc = catById(s.category); return `<button class="sug ${suggestionOn(s) ? 'on' : ''}" style="--c:${sc.color}" data-action="d-sug" data-k="${esc(s.key)}">
         <span class="sug__ic">${sc.icon}</span><span class="sug__name">${esc(s.label || sc.name)}</span><span class="sug__sub">${s.label ? esc(sc.name) : 'Categoria'}</span>${s.fixed ? `<span class="sug__amt num">${fmt(s.fixed)}</span>` : ''}</button>`; }).join('')}</div>` : ''}
-    <div class="keypad" id="keypad">${['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', 'del'].map((k) => `<button class="key" data-key="${k}" aria-label="${k === 'del' ? 'Cancella' : k}">${k === 'del' ? ICON.del : k}</button>`).join('')}</div>
+    <div class="keypad keypad--4" id="keypad">${['1', '2', '3', 'del', '4', '5', '6', '+', '7', '8', '9', '-', ',', '0', 'C', '='].map((k) => `<button class="key${/[+\-=C]|del/.test(k) ? ' key--op' : ''}" data-key="${k}" aria-label="${{ del: 'Cancella', C: 'Azzera', '-': 'Meno', '+': 'Più', '=': 'Uguale' }[k] || k}">${k === 'del' ? ICON.del : k === '-' ? '−' : k}</button>`).join('')}</div>
     <button class="btn btn--primary btn--block ${isIn ? 'btn--income' : ''}" id="saveBtn" data-action="d-save" data-page="1" ${amount > 0 ? '' : 'disabled'}>${saveLabel(1)}</button>
   </div>`;
 }
@@ -1170,7 +1197,8 @@ function renderDetails() {
 
     <div class="add__label"><span>Categoria</span></div>
     ${d.category && !d.catOpen ? `<button class="catpick" style="--c:${catById(d.category).color}" data-action="d-catopen"><span class="catbtn__ic">${catById(d.category).icon}</span><b>${esc(catById(d.category).name)}</b><span class="catpick__ch">Cambia</span></button>`
-    : `<div class="catgrid" id="catGrid">${list.map((c) => `<button class="catbtn ${d.category === c.id ? 'on' : ''}" style="--c:${c.color}" data-action="d-cat" data-v="${c.id}"><span class="catbtn__ic">${c.icon}</span><span class="catbtn__name">${esc(c.name)}</span></button>`).join('')}</div>`}
+    : `<div class="catgrid" id="catGrid">${list.map((c) => `<button class="catbtn ${d.category === c.id ? 'on' : ''}" style="--c:${c.color}" data-action="d-cat" data-v="${c.id}"><span class="catbtn__ic">${c.icon}</span><span class="catbtn__name">${esc(c.name)}</span></button>`).join('')}<button class="catbtn catbtn--new" data-action="cat-new"><span class="catbtn__ic">＋</span><span class="catbtn__name">Nuova</span></button></div>
+      ${d.newCat ? `<div class="newcat"><input class="input" id="ncIcon" maxlength="4" placeholder="🙂" value="${esc(d.newCatIcon || '')}" aria-label="Emoji"><input class="input" id="ncName" placeholder="Nome, es. Palestra" autocomplete="off" autocapitalize="sentences"><button class="btn btn--primary btn--sm" data-action="cat-create">Crea</button></div>` : ''}`}
 
     <div class="add__label"><span>${isIn ? 'Da chi' : 'Dove'}</span></div>
     <input class="input" id="dMerchant" placeholder="${isIn ? 'es. Velissima' : 'es. Aldi, Mercadona…'}" value="${esc(d.merchant)}" autocomplete="off" autocapitalize="words">
@@ -1217,6 +1245,8 @@ function goPage(n) { readDraftInputs(); draft.page = n; rerenderAdd(n === 2 ? 's
 function updateAmountOnly() {
   const a = $('#amt'); if (!a) return;
   a.innerHTML = amountHtml(); a.classList.toggle('zero', !draft.amt);
+  const ex = $('#expr'); if (ex) ex.innerHTML = exprHtml();
+  const rc = $('#recent'); if (rc) rc.hidden = !!draft.amt;
   const b = $('#saveBtn');
   b.disabled = !(draftAmount() > 0);
   b.textContent = saveLabel(1);
@@ -1224,13 +1254,19 @@ function updateAmountOnly() {
 }
 function pressKey(k) {
   let a = draft.amt;
+  const last = a.split(/[+-]/).pop();
   if (k === 'del') a = a.slice(0, -1);
-  else if (k === ',') { if (!a.includes(',')) a = (a || '0') + ','; }
+  else if (k === 'C') a = '';
+  else if (k === '=') { const v = draftAmount(); a = v > 0 ? String(v).replace('.', ',') : ''; }
+  else if (k === '+' || k === '-') {
+    if (!a) return shake();
+    a = a.replace(/[+\-,]$/, '') + k;
+  } else if (k === ',') { if (!last.includes(',')) a += last ? ',' : '0,'; }
   else {
-    const [i, d] = a.split(',');
+    const [i, d] = last.split(',');
     if (d !== undefined && d.length >= 2) return shake();
     if (d === undefined && (i || '').replace(/^0+/, '').length >= 6) return shake();
-    a = a === '0' ? k : a + k;
+    a = last === '0' ? a.slice(0, -1) + k : a + k;
   }
   draft.amt = a; vibrate(5); updateAmountOnly();
 }
@@ -1296,6 +1332,23 @@ function closeSheet() {
   s.classList.add('closing'); sheetKind = null; draft = null;
   setTimeout(() => { s.hidden = true; s.classList.remove('closing'); document.body.style.overflow = ''; }, 200);
 }
+// Trascina il pannello verso il basso per chiuderlo
+(() => {
+  const panel = $('#sheetPanel'); let y0 = null, dy = 0;
+  panel.addEventListener('touchstart', (e) => {
+    if (panel.scrollTop > 0 || e.target.closest('.keypad, .sugs, .chips, input, .catgrid, .hm')) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0; panel.style.transition = 'none';
+  }, { passive: true });
+  panel.addEventListener('touchmove', (e) => {
+    if (y0 == null) return; dy = Math.max(0, e.touches[0].clientY - y0);
+    if (dy > 0) panel.style.transform = `translateY(${dy}px)`;
+  }, { passive: true });
+  panel.addEventListener('touchend', () => {
+    if (y0 == null) return; y0 = null; panel.style.transition = 'transform .2s ease';
+    if (dy > 110) { closeSheet(); setTimeout(() => { panel.style.transform = ''; panel.style.transition = ''; }, 230); }
+    else panel.style.transform = '';
+  });
+})();
 let toastTimer;
 function toast(msg, undo) {
   const t = $('#toast'); clearTimeout(toastTimer);
@@ -1355,6 +1408,16 @@ document.addEventListener('click', async (e) => {
     // Inserimento
     case 'd-type': readDraftInputs(); if (draft.type !== v) { draft.type = v; draft.category = null; draft.merchant = ''; draft.note = ''; if (v === 'income') draft.split = null; } rerenderAdd(); break;
     case 'd-page': goPage(Number(v)); break;
+    case 'd-amt': draft.amt = String(v).replace('.', ','); vibrate(5); updateAmountOnly(); break;
+    case 'cat-new': readDraftInputs(); draft.newCat = !draft.newCat; rerenderAdd(); setTimeout(() => $('#ncName')?.focus(), 50); break;
+    case 'cat-create': {
+      const name = $('#ncName').value.trim(); if (!name) { $('#ncName').focus(); return; }
+      const PAL = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+      const list = state.data.settings.categories;
+      const c = { id: 'c-' + uid(), name: cap(name), type: draft.type, icon: $('#ncIcon').value.trim() || '•', color: PAL[list.length % PAL.length] };
+      state.data.settings.categories = [...list.filter((x) => x.id !== 'altro' && x.id !== 'altro-in'), c, ...list.filter((x) => x.id === 'altro' || x.id === 'altro-in')];
+      touchSettings(); readDraftInputs(); draft.category = c.id; draft.newCat = false; draft.catOpen = false; rerenderAdd(); toast(`Categoria "${c.name}" creata`); break;
+    }
     case 'd-sug': {
       readDraftInputs();
       const s = suggestions(draft.type).find((x) => x.key === el.dataset.k); if (!s) break;
@@ -1368,7 +1431,7 @@ document.addEventListener('click', async (e) => {
       }
       vibrate(5); rerenderAdd(); break;
     }
-    case 'd-cat': readDraftInputs(); draft.category = v; draft.catOpen = false; vibrate(5); rerenderAdd(); break;
+    case 'd-cat': readDraftInputs(); draft.category = v; draft.catOpen = false; draft.newCat = false; vibrate(5); rerenderAdd(); break;
     case 'd-catopen': readDraftInputs(); draft.catOpen = true; rerenderAdd(); break;
     case 'd-merchant': {
       readDraftInputs(); draft.merchant = v;
@@ -1474,6 +1537,8 @@ document.addEventListener('keydown', (e) => {
   if (draft.page === 2) { if (e.key === 'Enter') { e.preventDefault(); saveDraft(); } return; }
   if (/^[0-9]$/.test(e.key)) { e.preventDefault(); pressKey(e.key); }
   else if (e.key === ',' || e.key === '.') { e.preventDefault(); pressKey(','); }
+  else if (e.key === '+' || e.key === '-') { e.preventDefault(); pressKey(e.key); }
+  else if (e.key === '=') { e.preventDefault(); pressKey('='); }
   else if (e.key === 'Backspace') { e.preventDefault(); pressKey('del'); }
   else if (e.key === 'Enter') { e.preventDefault(); saveDraft(); }
 });
