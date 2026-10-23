@@ -1,7 +1,7 @@
 // Service worker: rende Flowa installabile e utilizzabile anche offline.
 // Quando modifichi i file dell'app, aumenta VERSION (e anche APP_VERSION in app.js e version.json).
-const VERSION = 'flowa-4';
-const SHELL = ['./', 'index.html', 'assets/css/app.css', 'assets/js/app.js', 'assets/icons/icon.svg', 'assets/icons/icon-192.png', 'manifest.webmanifest'];
+const VERSION = 'flowa-5';
+const SHELL = ['./', 'index.html', 'assets/css/app.css', 'assets/js/app.js', 'assets/js/importa.js', 'assets/icons/icon.svg', 'assets/icons/icon-192.png', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

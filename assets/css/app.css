@@ -491,3 +491,28 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; }
 .sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
 .sdot[data-s="ok"] { background: var(--income); } .sdot[data-s="err"] { background: var(--danger); } .sdot[data-s="off"] { background: var(--warn); } .sdot[data-s="busy"] { background: var(--accent); }
 .top h1 .num { letter-spacing: -.035em; }
+
+/* ---------- Importazione movimenti ---------- */
+.impmap { background: var(--surface-2); border-radius: 16px; padding: 4px 14px; margin-bottom: 12px; }
+.impmap summary { cursor: pointer; padding: 10px 0; font-weight: 600; font-size: 14px; }
+.impmap__grid { display: grid; gap: 10px; padding-bottom: 12px; }
+.impmap__grid label { display: grid; grid-template-columns: 110px 1fr; gap: 2px 10px; align-items: center; font-size: 13px; }
+.impmap__grid label > span { color: var(--ink-2); font-weight: 500; }
+.impmap__grid .input { height: 40px; font-size: 14px; background: var(--surface); padding: 0 10px; }
+.impmap__grid i { grid-column: 2; font-style: normal; font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.impsum { display: flex; gap: 8px; }
+.impsum > div { flex: 1; background: var(--surface-2); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; }
+.impsum b { font-size: 20px; font-weight: 600; }
+.impsum span { font-size: 12px; color: var(--ink-3); }
+.implist { display: flex; flex-direction: column; }
+.improw { display: flex; gap: 12px; align-items: flex-start; padding: 10px 2px; border-bottom: 1px solid var(--line); transition: opacity .15s; }
+.improw.off { opacity: .45; }
+.impchk { flex: none; width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--surface-3); display: grid; place-items: center; font-size: 15px; font-weight: 700; color: #fff; margin-top: 1px; }
+.impchk.on { background: var(--accent); border-color: var(--accent); }
+.improw__main { flex: 1; min-width: 0; }
+.improw__top { display: flex; justify-content: space-between; gap: 10px; font-weight: 600; font-size: 14.5px; }
+.improw__top .in { color: var(--income); }
+.improw__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.improw__sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 12.5px; color: var(--ink-3); }
+.impcat { height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; padding: 0 6px; max-width: 170px; }
+.improw__desc { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -6,6 +6,8 @@ App personale per spese ed entrate (PWA statica, nessun build) pubblicata su Git
 
 ## File
 - `index.html`, `assets/css/app.css`, `assets/js/app.js`, `sw.js`, `manifest.webmanifest`, `assets/icons/`: l'app.
+- `assets/js/importa.js`: Altro → Importa movimenti (Excel/CSV/PDF della banca o backup di Flowa): riconosce le colonne, pulisce i nomi dei negozi, indovina la categoria (prima dai negozi già usati, poi da parole chiave), salta i movimenti già presenti (stesso importo, max 2 giorni) e mostra un'anteprima.
+- `assets/vendor/`: librerie copiate qui (caricate solo quando servono): SheetJS 0.18.5 per Excel, pdf.js 3.11.174 per i PDF (usato con `isEvalSupported: false`).
 - `version.json`: se la versione pubblicata è diversa da `APP_VERSION` in `app.js`, l'app mostra il banner "Nuova versione di Flowa · Aggiorna".
 - `.github/workflows/pubblica.yml`: pubblica il sito a ogni push su `main`.
 
@@ -22,7 +24,8 @@ Prova in locale (`python3 -m http.server`, aggiungi `?oggi=AAAA-MM-GG` per simul
     "category": "id categoria", "merchant": "Aldi o null", "note": "testo o null",
     "method": "carta | contanti | bonifico | null", "updatedAt": "ISO",
     "split": {"person": "Marco", "mine": 6.25, "mode": "half|custom", "paidBy": "me|them", "settled": false},
-    "recurring": "id regola (se creata da una ricorrente)", "approx": true, "deleted": true
+    "recurring": "id regola (se creata da una ricorrente)", "approx": true, "deleted": true,
+    "importKey": "data|tipo|importo|descrizione (se importato da file)", "okDup": true
   }],
   "settings": { "updatedAt": "ISO", "categories": [{"id","name","type","icon","color"}],
                 "budgets": {"idCategoria": 250}, "recurring": [{"id","type","amount","category","merchant","note","method","freq":"monthly|weekly","day":"-1=ultimo giorno | 1-28 | 0-6 giorno settimana","start","active"}], "people": [] }

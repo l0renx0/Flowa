@@ -2,7 +2,7 @@
 // I dati vivono nel telefono (localStorage) e, se collegato, in un repository GitHub privato.
 'use strict';
 
-const APP_VERSION = 'flowa-4'; // deve coincidere con version.json e con VERSION in sw.js
+const APP_VERSION = 'flowa-5'; // deve coincidere con version.json e con VERSION in sw.js
 const DATA_KEY = 'flowa:data';
 const SYNC_KEY = 'flowa:sync';
 const UI_KEY = 'flowa:ui';
@@ -940,6 +940,7 @@ function viewAltro(sub) {
   <div class="section-t">Dati</div>
   <div class="list">
     ${item('#/altro/sync', '☁️', 'Sincronizzazione', state.sync.lastSync && state.syncStatus === 'ok' ? `Sincronizzato · ${new Date(state.sync.lastSync).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : syncText(), state.sync.token ? `<span class="sdot" data-s="${state.syncStatus}"></span>` : 'Da collegare')}
+    <label class="item" style="cursor:pointer"><span class="ic">📥</span><span class="item__main"><span class="item__title">Importa movimenti</span><span class="item__sub">Dal file della banca: Excel, CSV o PDF</span></span>${ICON.chev}<input type="file" id="movFile" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.ods,.numbers,.pdf,.json,text/csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
     ${item('#/altro/backup', '💾', 'Backup ed esportazione', 'Scarica una copia o esporta per Excel')}
   </div>
   <div class="section-t">Aspetto</div>
