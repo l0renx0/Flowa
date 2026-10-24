@@ -2,7 +2,7 @@
 // I dati vivono nel telefono (localStorage) e, se collegato, in un repository GitHub privato.
 'use strict';
 
-const APP_VERSION = 'flowa-5'; // deve coincidere con version.json e con VERSION in sw.js
+const APP_VERSION = 'flowa-6'; // deve coincidere con version.json e con VERSION in sw.js
 const DATA_KEY = 'flowa:data';
 const SYNC_KEY = 'flowa:sync';
 const UI_KEY = 'flowa:ui';
@@ -90,12 +90,19 @@ const state = {
   syncStatus: 'local',
   syncError: '',
 };
-const ui = Object.assign({
-  home: { month: null }, mov: { q: '', type: 'all', cat: null, limit: 150 },
-  an: { tab: 'panoramica', pPeriod: 'mese', noRent: true, open: null, catPeriod: 'mese', catType: 'expense' },
-  recapSeen: null,
-}, store.get(UI_KEY, {}));
-ui.home.month = null; ui.mov.limit = 150; ui.an.open = null;
+// Preferenze salvate: si uniscono ai valori di partenza sezione per sezione, così non manca mai nessun campo.
+const ui = (() => {
+  const def = {
+    home: { month: null }, mov: { q: '', type: 'all', cat: null, limit: 150 },
+    an: { tab: 'panoramica', pPeriod: 'mese', noRent: true, open: null, catPeriod: 'mese', catType: 'expense' },
+    recapSeen: null,
+  };
+  const saved = store.get(UI_KEY, {}) || {};
+  return { ...def, recapSeen: saved.recapSeen ?? null, mov: { ...def.mov, ...(saved.mov || {}) }, an: { ...def.an, ...(saved.an || {}) } };
+})();
+ui.home.month = null; ui.mov.q = ''; ui.mov.cat = null; ui.mov.limit = 150; ui.an.open = null;
+if (!['all', 'expense', 'income'].includes(ui.mov.type)) ui.mov.type = 'all';
+if (!['panoramica', 'settimane', 'mesi', 'categorie'].includes(ui.an.tab)) ui.an.tab = 'panoramica';
 const saveUi = () => store.set(UI_KEY, { an: { tab: ui.an.tab, pPeriod: ui.an.pPeriod, noRent: ui.an.noRent, catPeriod: ui.an.catPeriod, catType: ui.an.catType }, recapSeen: ui.recapSeen, mov: { type: ui.mov.type } });
 
 const live = () => state.data.transactions.filter((t) => !t.deleted);
