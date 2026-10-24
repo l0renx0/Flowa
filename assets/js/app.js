@@ -2,7 +2,7 @@
 // I dati vivono nel telefono (localStorage) e, se collegato, in un repository GitHub privato.
 'use strict';
 
-const APP_VERSION = 'flowa-6'; // deve coincidere con version.json e con VERSION in sw.js
+const APP_VERSION = 'flowa-7'; // deve coincidere con version.json e con VERSION in sw.js
 const DATA_KEY = 'flowa:data';
 const SYNC_KEY = 'flowa:sync';
 const UI_KEY = 'flowa:ui';
@@ -1055,16 +1055,17 @@ function render(animate = true) {
 }
 
 // ---------- Pannello di inserimento ----------
-// Due passaggi: 1) importo + suggeriti (il caso veloce), 2) dettagli (categoria, dove, quando, come, nota, dividi).
 let draft = null;
 function openAdd(t = null, preset = {}) {
   const lastMethod = sortDesc(live().filter((x) => x.method && x.type === 'expense'))[0]?.method || 'carta';
   draft = t
-    ? { id: t.id, type: t.type, amt: String(t.amount).replace('.', ','), category: t.category, merchant: t.merchant || '', note: t.note || '', date: t.date, method: t.method || null, split: t.split ? { ...t.split } : null, orig: t, page: 2 }
-    : { id: null, type: 'expense', amt: '', category: null, merchant: '', note: '', date: today(), method: lastMethod, split: null, page: 1, ...preset };
+    ? { id: t.id, type: t.type, amt: amtStr(t.amount), category: t.category, merchant: t.merchant || '', note: t.note || '', date: t.date, method: t.method || null, split: t.split ? { ...t.split } : null, orig: t, showNote: !!t.note }
+    : { id: null, type: 'expense', amt: '', category: null, merchant: '', note: '', date: today(), method: lastMethod, split: null, ...preset };
   $('#toast').hidden = true;
   openSheet(renderAdd(), 'add');
+  requestAnimationFrame(() => { const on = $('#whats .what.on'); if (on) $('#whats').scrollLeft = on.offsetLeft - 16; });
 }
+const amtStr = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ','));
 // L'importo può essere un piccolo calcolo, es. "3,20+4,50-1" (comodo per sommare più scontrini).
 const hasOps = (a) => /[+-]/.test(a || '');
 const draftAmount = () => round2((draft.amt || '').match(/[+-]?[^+-]+/g)?.reduce((s, t) => s + (Number(t.replace(',', '.')) || 0), 0) || 0);
@@ -1133,134 +1134,126 @@ function usualCategory(merchant, type) {
   const n = {}; for (const t of live()) if (t.type === type && normKey(t.merchant) === normKey(merchant)) n[t.category] = (n[t.category] || 0) + 1;
   return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 }
-function merchantOptions() {
-  const q = normKey(draft.merchant);
+function merchantOptions(filter = true) {
+  const q = filter ? normKey(draft.merchant) : '';
   const all = topMerchants(draft.type, null);
   const inCat = draft.category ? topMerchants(draft.type, draft.category) : all;
-  const list = q ? all.filter((m) => normKey(m).includes(q) && normKey(m) !== q) : inCat;
+  let list = q ? all.filter((m) => normKey(m).includes(q) && normKey(m) !== q) : inCat;
+  if (!filter && draft.merchant && !list.some((m) => normKey(m) === normKey(draft.merchant))) list = [draft.merchant, ...list];
   return list.slice(0, 8);
 }
-const merchantChips = () => merchantOptions().map((m) => `<button class="chip" data-action="d-merchant" data-v="${esc(m)}">${esc(m)}</button>`).join('');
+const merchantChips = () => merchantChipsFor((m) => normKey(m) === normKey(draft.merchant));
 
-function saveLabel(page) {
-  const amount = draftAmount(); const d = draft;
-  if (page === 1 && !d.category) return 'Avanti · scegli la categoria';
-  if (page === 2 && !(amount > 0)) return 'Inserisci l\'importo';
-  return (d.orig ? 'Salva modifiche' : d.type === 'income' ? 'Aggiungi entrata' : 'Aggiungi spesa') + (amount > 0 ? ' · ' + fmt(amount) : '');
-}
+// Una sola schermata, dall'alto in basso: quanto → per cosa → dove → quando/come. Il tasto ✓ è nel tastierino.
 function hintText() {
   const d = draft, o = d.orig;
+  if (d.warn) return d.warn;
   if (d.split) { const a = draftAmount(); return `La tua parte: ${fmt(d.split.mode === 'custom' ? Math.min(d.split.mine || 0, a) : round2(a / 2))}`; }
   if (o?.fixed) return o.fixed;
   if (o?.approx) return '≈ Data stimata durante l\'importazione dal foglio';
   if (o?.recurring) return '↻ Inserita in automatico (ricorrente)';
   return '';
 }
-function renderAdd() {
-  return draft.page === 2 ? renderDetails() : renderAmount();
+const ready = () => draftAmount() > 0 && !!draft.category;
+function okKeyHtml() {
+  return `<span class="okk__ic">✓</span><span class="okk__t">${draft.orig ? 'Salva' : 'Aggiungi'}</span>`;
 }
-function renderAmount() {
+function renderAdd() {
   const d = draft; const isIn = d.type === 'income';
-  const c = d.category ? catById(d.category) : null;
-  const sug = suggestions(d.type);
-  const amount = draftAmount();
-  const what = c ? d.merchant || d.note || c.name : 'Categoria';
+  const u = usage(d.type);
+  const combos = suggestions(d.type).filter((s) => s.label && s.isMerchant).slice(0, 4);
+  const comboOn = combos.find((s) => suggestionOn(s));
+  const list = cats().filter((c) => c.type === d.type).sort((a, b) => (u[b.id] || 0) - (u[a.id] || 0));
   const recent = recentAmounts();
+  const ppl = people();
+  const dateLbl = d.date === today() ? 'Oggi' : d.date === addDays(today(), -1) ? 'Ieri' : shortDate(d.date);
+  const mOn = (m) => normKey(m) === normKey(d.merchant);
   return `
-  <div class="add add--p1">
+  <div class="add">
     <div class="sheet__head">
       <div class="seg seg--type"><button class="${!isIn ? 'on' : ''}" data-action="d-type" data-v="expense">Spesa</button><button class="${isIn ? 'on' : ''}" data-action="d-type" data-v="income">Entrata</button></div>
-      <button class="x" data-action="close-sheet" aria-label="Chiudi">${ICON.x}</button>
-    </div>
-    <div class="amount"><div class="amount__expr num" id="expr">${exprHtml()}</div><div class="amount__v ${!d.amt ? 'zero' : ''} ${isIn ? 'in' : ''}" id="amt">${amountHtml()}</div>
-      <div class="amount__hint" id="hint">${esc(hintText())}</div>
-      ${recent.length ? `<div class="recent" id="recent" ${d.amt ? 'hidden' : ''}><span class="muted">Le ultime volte:</span>${recent.map((v) => `<button class="chip" data-action="d-amt" data-v="${v}">${fmt(v)}</button>`).join('')}</div>` : ''}</div>
-    <div class="facts">
-      <button class="fact fact--main ${c ? '' : 'fact--empty'}" data-action="d-page" data-v="2">${c ? icon(c) : '<span class="ic">＋</span>'}<span class="fact__txt">${esc(what)}</span>${ICON.chev}</button>
-      <span class="fact datewrap">📅 ${shortDate(d.date)}<input type="date" id="dDate" value="${d.date}" aria-label="Data"></span>
-      <button class="fact" data-action="d-method">${METHODS[d.method] || '💳 Metodo'}</button>
-    </div>
-    ${sug.length ? `<div class="add__label"><span>Suggeriti</span><span class="muted">tocca per compilare</span></div>
-    <div class="sugs">${sug.map((s) => { const sc = catById(s.category); return `<button class="sug ${suggestionOn(s) ? 'on' : ''}" style="--c:${sc.color}" data-action="d-sug" data-k="${esc(s.key)}">
-        <span class="sug__ic">${sc.icon}</span><span class="sug__name">${esc(s.label || sc.name)}</span><span class="sug__sub">${s.label ? esc(sc.name) : 'Categoria'}</span>${s.fixed ? `<span class="sug__amt num">${fmt(s.fixed)}</span>` : ''}</button>`; }).join('')}</div>` : ''}
-    <div class="keypad keypad--4" id="keypad">${['1', '2', '3', 'del', '4', '5', '6', '+', '7', '8', '9', '-', ',', '0', 'C', '='].map((k) => `<button class="key${/[+\-=C]|del/.test(k) ? ' key--op' : ''}" data-key="${k}" aria-label="${{ del: 'Cancella', C: 'Azzera', '-': 'Meno', '+': 'Più', '=': 'Uguale' }[k] || k}">${k === 'del' ? ICON.del : k === '-' ? '−' : k}</button>`).join('')}</div>
-    <button class="btn btn--primary btn--block ${isIn ? 'btn--income' : ''}" id="saveBtn" data-action="d-save" data-page="1" ${amount > 0 ? '' : 'disabled'}>${saveLabel(1)}</button>
-  </div>`;
-}
-function renderDetails() {
-  const d = draft; const isIn = d.type === 'income';
-  const list = cats().filter((c) => c.type === d.type);
-  const ppl = people();
-  const amount = draftAmount();
-  const t = today(), y = addDays(t, -1);
-  const other = d.date !== t && d.date !== y;
-  return `
-  <div class="add add--p2">
-    <div class="sheet__head">
-      <button class="back" data-action="d-page" data-v="1">${ICON.back}Importo</button>
-      <button class="detail-amt num ${isIn ? 'in' : ''}" data-action="d-page" data-v="1">${amount > 0 ? fmt(amount) : '0,00 €'} <span>✎</span></button>
-      <button class="x" data-action="close-sheet" aria-label="Chiudi">${ICON.x}</button>
-    </div>
-    ${hintText() ? `<div class="amount__hint" id="hint" style="text-align:center;margin:-2px 0 6px">${esc(hintText())}</div>` : '<div id="hint" class="amount__hint" style="text-align:center;min-height:0"></div>'}
-
-    <div class="add__label"><span>Categoria</span></div>
-    ${d.category && !d.catOpen ? `<button class="catpick" style="--c:${catById(d.category).color}" data-action="d-catopen"><span class="catbtn__ic">${catById(d.category).icon}</span><b>${esc(catById(d.category).name)}</b><span class="catpick__ch">Cambia</span></button>`
-    : `<div class="catgrid" id="catGrid">${list.map((c) => `<button class="catbtn ${d.category === c.id ? 'on' : ''}" style="--c:${c.color}" data-action="d-cat" data-v="${c.id}"><span class="catbtn__ic">${c.icon}</span><span class="catbtn__name">${esc(c.name)}</span></button>`).join('')}<button class="catbtn catbtn--new" data-action="cat-new"><span class="catbtn__ic">＋</span><span class="catbtn__name">Nuova</span></button></div>
-      ${d.newCat ? `<div class="newcat"><input class="input" id="ncIcon" maxlength="4" placeholder="🙂" value="${esc(d.newCatIcon || '')}" aria-label="Emoji"><input class="input" id="ncName" placeholder="Nome, es. Palestra" autocomplete="off" autocapitalize="sentences"><button class="btn btn--primary btn--sm" data-action="cat-create">Crea</button></div>` : ''}`}
-
-    <div class="add__label"><span>${isIn ? 'Da chi' : 'Dove'}</span></div>
-    <input class="input" id="dMerchant" placeholder="${isIn ? 'es. Velissima' : 'es. Aldi, Mercadona…'}" value="${esc(d.merchant)}" autocomplete="off" autocapitalize="words">
-    <div class="chips chips--in" id="merchChips">${merchantChips()}</div>
-
-    <div class="add__label"><span>Quando</span></div>
-    <div class="chips chips--in">
-      <button class="chip ${d.date === t ? 'on' : ''}" data-action="d-date" data-v="${t}">Oggi</button>
-      <button class="chip ${d.date === y ? 'on' : ''}" data-action="d-date" data-v="${y}">Ieri</button>
-      <span class="chip datewrap ${other ? 'on' : ''}">📅 ${other ? dayLabel(d.date) : 'Altro giorno'}<input type="date" id="dDate" value="${d.date}" aria-label="Scegli la data"></span>
+      <div class="row" style="flex:none;gap:8px">${d.orig ? `<button class="x x--del" data-action="d-delete" aria-label="Elimina">🗑</button>` : ''}<button class="x" data-action="close-sheet" aria-label="Chiudi">${ICON.x}</button></div>
     </div>
 
-    <div class="add__label"><span>Come</span></div>
-    <div class="seg seg--full">${Object.entries(METHODS).map(([k, l]) => `<button class="${d.method === k ? 'on' : ''}" data-action="d-method" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="amount">
+      <div class="amount__expr num" id="expr">${exprHtml()}</div>
+      <div class="amount__v ${!d.amt ? 'zero' : ''} ${isIn ? 'in' : ''}" id="amt">${amountHtml()}</div>
+      <div class="amount__hint ${d.warn ? 'warn' : ''}" id="hint">${esc(hintText())}</div>
+      ${recent.length ? `<div class="recent" id="recent" ${d.amt ? 'hidden' : ''}>${recent.map((v) => `<button class="chip" data-action="d-amt" data-v="${v}">${fmt(v)}</button>`).join('')}</div>` : ''}
+    </div>
 
-    <div class="add__label"><span>Nota</span><span class="muted">facoltativa</span></div>
-    <input class="input" id="dNote" placeholder="es. cena con Marco" value="${esc(d.note)}" autocomplete="off">
+    <div class="add__label"><span>${isIn ? 'Che entrata è?' : 'Per cosa?'}</span>${d.category ? `<span class="muted">${esc(catById(d.category).name)}</span>` : ''}</div>
+    <div class="whats" id="whats">
+      ${combos.map((s) => { const c = catById(s.category); return `<button class="what what--combo ${suggestionOn(s) ? 'on' : ''}" style="--c:${c.color}" data-action="d-sug" data-k="${esc(s.key)}"><span class="what__c">${c.icon}</span><span class="what__l">${esc(s.label)}</span></button>`; }).join('')}
+      ${combos.length ? '<span class="wsep"></span>' : ''}
+      ${list.map((c) => `<button class="what ${d.category === c.id && !comboOn ? 'on' : ''}" style="--c:${c.color}" data-action="d-cat" data-v="${c.id}"><span class="what__c">${c.icon}</span><span class="what__l">${esc(c.name)}</span></button>`).join('')}
+      <button class="what what--new" data-action="cat-new"><span class="what__c">＋</span><span class="what__l">Nuova</span></button>
+    </div>
+    ${d.newCat ? `<div class="newcat"><input class="input" id="ncIcon" maxlength="4" placeholder="🙂" aria-label="Emoji"><input class="input" id="ncName" placeholder="Nome, es. Palestra" autocomplete="off" autocapitalize="sentences"><button class="btn btn--primary btn--sm" data-action="cat-create">Crea</button></div>` : ''}
 
-    ${!isIn ? `<button class="splitrow" data-action="d-split"><span><b>÷ Dividi con qualcuno</b><span class="small muted">Nei totali conta solo la tua parte</span></span><span class="switch ${d.split ? 'on' : ''}"></span></button>` : ''}
+    <div class="dove">
+      <input class="minput ${d.merchant ? 'filled' : ''}" id="dMerchant" placeholder="${isIn ? '✎ Da chi' : '✎ Dove'}" value="${esc(d.merchant)}" autocomplete="off" autocapitalize="words" enterkeyhint="done">
+      <div class="chips" id="merchChips">${merchantChipsFor(mOn, false)}</div>
+    </div>
+
+    <div class="metas">
+      <span class="chip datewrap ${d.date !== today() ? 'on' : ''}">📅 ${dateLbl}<input type="date" id="dDate" value="${d.date}" aria-label="Data"></span>
+      <button class="chip" data-action="d-method">${METHODS[d.method] || '💳 Metodo'}</button>
+      <button class="chip ${d.note ? 'on' : ''}" data-action="d-note">📝 ${d.note ? esc(d.note.length > 14 ? d.note.slice(0, 13) + '…' : d.note) : 'Nota'}</button>
+      ${!isIn ? `<button class="chip ${d.split ? 'on' : ''}" data-action="d-split">÷ ${d.split?.person ? esc(d.split.person) : 'Dividi'}</button>` : ''}
+    </div>
+    ${d.showNote ? `<input class="input input--sm" id="dNote" placeholder="Nota, es. cena con Marco" value="${esc(d.note)}" autocomplete="off" enterkeyhint="done">` : ''}
     ${d.split ? `<div class="split">
-      <input class="input" id="sPerson" placeholder="Con chi?" value="${esc(d.split.person || '')}" autocomplete="off" autocapitalize="words">
+      <div class="row"><input class="input input--sm" id="sPerson" placeholder="Con chi?" value="${esc(d.split.person || '')}" autocomplete="off" autocapitalize="words"></div>
       ${ppl.length ? `<div class="chips chips--in" style="margin-top:8px">${ppl.map((p) => `<button class="chip ${d.split.person === p ? 'on' : ''}" data-action="s-person" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>` : ''}
       <div class="row" style="margin-top:10px"><span class="small muted">La mia parte</span><div class="seg" style="flex:none"><button class="${d.split.mode !== 'custom' ? 'on' : ''}" data-action="s-mode" data-v="half">Metà</button><button class="${d.split.mode === 'custom' ? 'on' : ''}" data-action="s-mode" data-v="custom">Importo</button></div></div>
-      ${d.split.mode === 'custom' ? `<input class="input" id="sMine" inputmode="decimal" style="margin-top:8px" placeholder="Quanto è tuo? es. 10,00" value="${d.split.mine ? String(d.split.mine).replace('.', ',') : ''}">` : ''}
+      ${d.split.mode === 'custom' ? `<input class="input input--sm" id="sMine" inputmode="decimal" style="margin-top:8px" placeholder="Quanto è tuo? es. 10,00" value="${d.split.mine ? String(d.split.mine).replace('.', ',') : ''}">` : ''}
       <div class="row" style="margin-top:10px"><span class="small muted">Ha pagato</span><div class="seg" style="flex:none"><button class="${d.split.paidBy !== 'them' ? 'on' : ''}" data-action="s-paid" data-v="me">Io</button><button class="${d.split.paidBy === 'them' ? 'on' : ''}" data-action="s-paid" data-v="them">${esc(d.split.person || 'L\'altro')}</button></div></div>
     </div>` : ''}
 
-    <div class="sheet__foot row">
-      ${d.orig ? `<button class="btn btn--danger" style="flex:none;width:54px;padding:0" data-action="d-delete" aria-label="Elimina">🗑</button>` : ''}
-      <button class="btn btn--primary btn--block ${isIn ? 'btn--income' : ''}" id="saveBtn" data-action="d-save" data-page="2">${saveLabel(2)}</button>
+    <div class="keypad keypad--ok" id="keypad">
+      ${['1', '2', '3', 'del', '4', '5', '6', '+', '7', '8', '9', 'ok', ',', '0', '-'].map((k) => k === 'ok'
+        ? `<button class="key key--ok ${ready() ? 'ready' : ''} ${isIn ? 'in' : ''}" id="okKey" data-action="d-save" aria-label="${d.orig ? 'Salva' : 'Aggiungi'}">${okKeyHtml()}</button>`
+        : `<button class="key${/[+\-]|del/.test(k) ? ' key--op' : ''}" data-key="${k}" aria-label="${{ del: 'Cancella (tieni premuto per azzerare)', '-': 'Meno', '+': 'Più' }[k] || k}">${k === 'del' ? ICON.del : k === '-' ? '−' : k}</button>`).join('')}
     </div>
   </div>`;
 }
-function rerenderAdd(slide) {
-  const p = $('#sheetPanel'); const st = slide ? 0 : p.scrollTop;
-  const sugScroll = $('.sugs')?.scrollLeft;
+function merchantChipsFor(isOn, filter = true) {
+  return merchantOptions(filter).map((m) => `<button class="chip ${isOn(m) ? 'on' : ''}" data-action="d-merchant" data-v="${esc(m)}">${esc(m)}</button>`).join('');
+}
+function rerenderAdd() {
+  const p = $('#sheetPanel'); const st = p.scrollTop;
+  const wl = $('#whats')?.scrollLeft, ml = $('#merchChips')?.scrollLeft;
   const focus = document.activeElement?.id; const sel = focus && document.activeElement.selectionStart;
   p.innerHTML = renderAdd(); p.scrollTop = st;
-  if (!slide && $('.sugs') && sugScroll != null) $('.sugs').scrollLeft = sugScroll;
-  if (slide) $('.add').classList.add(slide);
-  if (!slide && focus && document.getElementById(focus)) { const el = document.getElementById(focus); el.focus(); try { el.setSelectionRange(sel, sel); } catch (e) {} }
+  if (wl != null && $('#whats')) $('#whats').scrollLeft = wl;
+  if (ml != null && $('#merchChips')) $('#merchChips').scrollLeft = ml;
+  if (focus && document.getElementById(focus)) { const el = document.getElementById(focus); el.focus(); try { el.setSelectionRange(sel, sel); } catch (e) {} }
 }
-function goPage(n) { readDraftInputs(); draft.page = n; rerenderAdd(n === 2 ? 'slide-l' : 'slide-r'); }
+function goPage() { rerenderAdd(); } // compatibilità con la versione a due schermate
+function revealSelected() {
+  const on = $('#whats .what.on'); const row = $('#whats');
+  if (on && row && (on.offsetLeft < row.scrollLeft || on.offsetLeft + on.offsetWidth > row.scrollLeft + row.clientWidth)) row.scrollTo({ left: on.offsetLeft - 16, behavior: 'smooth' });
+}
 function updateAmountOnly() {
   const a = $('#amt'); if (!a) return;
+  draft.warn = '';
   a.innerHTML = amountHtml(); a.classList.toggle('zero', !draft.amt);
   const ex = $('#expr'); if (ex) ex.innerHTML = exprHtml();
   const rc = $('#recent'); if (rc) rc.hidden = !!draft.amt;
-  const b = $('#saveBtn');
-  b.disabled = !(draftAmount() > 0);
-  b.textContent = saveLabel(1);
-  $('#hint').textContent = hintText();
+  const h = $('#hint'); h.textContent = hintText(); h.classList.remove('warn');
+  $('#okKey')?.classList.toggle('ready', ready());
 }
+let delTimer = null, delLong = false;
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest?.('.key[data-key="del"]')) return;
+  delLong = false; clearTimeout(delTimer);
+  delTimer = setTimeout(() => { delLong = true; if (draft) { draft.amt = ''; vibrate(25); updateAmountOnly(); } }, 450);
+});
+document.addEventListener('pointerup', () => clearTimeout(delTimer));
+document.addEventListener('pointercancel', () => clearTimeout(delTimer));
 function pressKey(k) {
+  if (k === 'del' && delLong) { delLong = false; return; } // già azzerato tenendo premuto
   let a = draft.amt;
   const last = a.split(/[+-]/).pop();
   if (k === 'del') a = a.slice(0, -1);
@@ -1278,7 +1271,8 @@ function pressKey(k) {
   }
   draft.amt = a; vibrate(5); updateAmountOnly();
 }
-function shake() { const a = $('#amt') || $('.detail-amt'); if (!a) return; a.classList.remove('shake'); void a.offsetWidth; a.classList.add('shake'); vibrate(20); }
+function shake(el = $('#amt')) { if (!el) return; el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); vibrate(20); }
+function warn(msg, el) { draft.warn = msg; const h = $('#hint'); if (h) { h.textContent = msg; h.classList.add('warn'); } shake(el); }
 function readDraftInputs() {
   const m = $('#dMerchant'), n = $('#dNote'), sp = $('#sPerson'), sm = $('#sMine');
   if (m) draft.merchant = m.value.trim();
@@ -1289,15 +1283,11 @@ function readDraftInputs() {
 function saveDraft() {
   readDraftInputs();
   const d = draft; const amount = round2(draftAmount());
-  if (!(amount > 0)) { if (d.page === 2) goPage(1); else shake(); return; }
-  if (!d.category) {
-    if (d.page === 1) { goPage(2); return; }
-    $('#catGrid').animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'none' }], { duration: 260 });
-    $('#catGrid').scrollIntoView({ block: 'center', behavior: 'smooth' }); vibrate(20); return;
-  }
+  if (!(amount > 0)) return warn('Scrivi l\'importo', $('#amt'));
+  if (!d.category) return warn(d.type === 'income' ? 'Scegli che entrata è 👇' : 'Scegli per cosa hai speso 👇', $('#whats'));
   let split = null;
   if (d.type === 'expense' && d.split) {
-    if (!d.split.person) { if (d.page !== 2) goPage(2); setTimeout(() => $('#sPerson')?.focus(), 50); return; }
+    if (!d.split.person) { warn('Scrivi con chi hai diviso'); setTimeout(() => $('#sPerson')?.focus(), 50); return; }
     const mine = d.split.mode === 'custom' ? round2(Math.min(d.split.mine || 0, amount)) : round2(amount / 2);
     split = { person: d.split.person, mine, mode: d.split.mode || 'half', paidBy: d.split.paidBy || 'me', settled: !!d.split.settled };
   }
@@ -1403,7 +1393,7 @@ function exportCsv() {
 
 // ---------- Eventi ----------
 document.addEventListener('click', async (e) => {
-  const key = e.target.closest('.key');
+  const key = e.target.closest('.key[data-key]');
   if (key) { pressKey(key.dataset.key); return; }
   const el = e.target.closest('[data-action]'); if (!el) return;
   const a = el.dataset.action, v = el.dataset.v;
@@ -1416,7 +1406,7 @@ document.addEventListener('click', async (e) => {
     // Inserimento
     case 'd-type': readDraftInputs(); if (draft.type !== v) { draft.type = v; draft.category = null; draft.merchant = ''; draft.note = ''; if (v === 'income') draft.split = null; } rerenderAdd(); break;
     case 'd-page': goPage(Number(v)); break;
-    case 'd-amt': draft.amt = String(v).replace('.', ','); vibrate(5); updateAmountOnly(); break;
+    case 'd-amt': draft.amt = amtStr(Number(v)); vibrate(5); updateAmountOnly(); break;
     case 'cat-new': readDraftInputs(); draft.newCat = !draft.newCat; rerenderAdd(); setTimeout(() => $('#ncName')?.focus(), 50); break;
     case 'cat-create': {
       const name = $('#ncName').value.trim(); if (!name) { $('#ncName').focus(); return; }
@@ -1435,15 +1425,17 @@ document.addEventListener('click', async (e) => {
         draft.merchant = s.label && s.isMerchant ? s.label : '';
         draft.note = s.label && !s.isMerchant ? s.label : '';
         if (s.method) draft.method = s.method;
+        draft.warn = '';
         if (!draft.amt && s.fixed) draft.amt = String(s.fixed).replace('.', ',');
       }
-      vibrate(5); rerenderAdd(); break;
+      vibrate(5); rerenderAdd(); revealSelected(); break;
     }
-    case 'd-cat': readDraftInputs(); draft.category = v; draft.catOpen = false; draft.newCat = false; vibrate(5); rerenderAdd(); break;
+    case 'd-cat': { readDraftInputs(); draft.category = v; draft.newCat = false; draft.warn = ''; const uc = draft.merchant && usualCategory(draft.merchant, draft.type); if (uc && uc !== v) draft.merchant = ''; vibrate(5); rerenderAdd(); break; }
+    case 'd-note': readDraftInputs(); draft.showNote = !draft.showNote || !!draft.note; rerenderAdd(); setTimeout(() => $('#dNote')?.focus(), 30); break;
     case 'd-catopen': readDraftInputs(); draft.catOpen = true; rerenderAdd(); break;
     case 'd-merchant': {
-      readDraftInputs(); draft.merchant = v;
-      if (!draft.category) draft.category = usualCategory(v, draft.type);
+      readDraftInputs(); draft.merchant = normKey(draft.merchant) === normKey(v) ? '' : v; draft.warn = '';
+      if (draft.merchant && !draft.category) draft.category = usualCategory(v, draft.type);
       vibrate(5); rerenderAdd(); break;
     }
     case 'd-date': readDraftInputs(); draft.date = v; rerenderAdd(); break;
@@ -1542,7 +1534,6 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) { if (e.key === 'Enter') { e.preventDefault(); saveDraft(); } return; }
-  if (draft.page === 2) { if (e.key === 'Enter') { e.preventDefault(); saveDraft(); } return; }
   if (/^[0-9]$/.test(e.key)) { e.preventDefault(); pressKey(e.key); }
   else if (e.key === ',' || e.key === '.') { e.preventDefault(); pressKey(','); }
   else if (e.key === '+' || e.key === '-') { e.preventDefault(); pressKey(e.key); }
