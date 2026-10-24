@@ -13,7 +13,10 @@ App personale per spese ed entrate (PWA statica, nessun build) pubblicata su Git
 
 ## Quando modifichi l'app
 Aumenta **insieme** questi tre valori (es. `flowa-1` → `flowa-2`): `APP_VERSION` in `assets/js/app.js`, `VERSION` in `sw.js`, `version` in `version.json`. Così sul telefono compare il banner per aggiornare e i dati restano dove sono.
-Prova in locale (`python3 -m http.server`, aggiungi `?oggi=AAAA-MM-GG` per simulare un giorno) prima del push. Mantieni il design: Geist, accento viola (`--accent`), schede bianche su grigio chiaro, modalità scura tramite i token in `:root`.
+Prova in locale (`python3 -m http.server`, aggiungi `?oggi=AAAA-MM-GG` per simulare un giorno) prima del push.
+Se l'utente vuole **vedere una modifica prima di averla nell'app**: mettila in una cartella `anteprima/` (copia dell'app con chiavi di salvataggio diverse, `flowa-prova:*`, senza sincronizzazione né service worker e con dati di esempio se non trova quelli veri). Il workflow la pubblica su https://l0renx0.github.io/Flowa/anteprima/ senza toccare l'app. Dopo l'ok, porta le modifiche nell'app vera e cancella la cartella.
+
+Inserimento di un movimento: tre passi (1 quanto e quando, 2 per cosa, 3 dove/come/conferma), approvati dall'utente dopo l'anteprima. Mantieni il design: Geist, accento viola (`--accent`), schede bianche su grigio chiaro, modalità scura tramite i token in `:root`.
 
 ## Formato dei dati (`Flowa-dati/data.json`)
 ```json

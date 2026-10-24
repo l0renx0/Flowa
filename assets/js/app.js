@@ -2,7 +2,7 @@
 // I dati vivono nel telefono (localStorage) e, se collegato, in un repository GitHub privato.
 'use strict';
 
-const APP_VERSION = 'flowa-7'; // deve coincidere con version.json e con VERSION in sw.js
+const APP_VERSION = 'flowa-8'; // deve coincidere con version.json e con VERSION in sw.js
 const DATA_KEY = 'flowa:data';
 const SYNC_KEY = 'flowa:sync';
 const UI_KEY = 'flowa:ui';
@@ -1059,11 +1059,10 @@ let draft = null;
 function openAdd(t = null, preset = {}) {
   const lastMethod = sortDesc(live().filter((x) => x.method && x.type === 'expense'))[0]?.method || 'carta';
   draft = t
-    ? { id: t.id, type: t.type, amt: amtStr(t.amount), category: t.category, merchant: t.merchant || '', note: t.note || '', date: t.date, method: t.method || null, split: t.split ? { ...t.split } : null, orig: t, showNote: !!t.note }
-    : { id: null, type: 'expense', amt: '', category: null, merchant: '', note: '', date: today(), method: lastMethod, split: null, ...preset };
+    ? { id: t.id, type: t.type, amt: amtStr(t.amount), category: t.category, merchant: t.merchant || '', note: t.note || '', date: t.date, method: t.method || null, split: t.split ? { ...t.split } : null, orig: t, showNote: !!t.note, step: 3 }
+    : { id: null, type: 'expense', amt: '', category: null, merchant: '', note: '', date: today(), method: lastMethod, split: null, step: 1, ...preset };
   $('#toast').hidden = true;
   openSheet(renderAdd(), 'add');
-  requestAnimationFrame(() => { const on = $('#whats .what.on'); if (on) $('#whats').scrollLeft = on.offsetLeft - 16; });
 }
 const amtStr = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ','));
 // L'importo può essere un piccolo calcolo, es. "3,20+4,50-1" (comodo per sommare più scontrini).
@@ -1145,6 +1144,7 @@ function merchantOptions(filter = true) {
 const merchantChips = () => merchantChipsFor((m) => normKey(m) === normKey(draft.merchant));
 
 // Una sola schermata, dall'alto in basso: quanto → per cosa → dove → quando/come. Il tasto ✓ è nel tastierino.
+// Tre passi, una domanda per schermata: 1) quanto e quando  2) per cosa  3) dove, come e conferma.
 function hintText() {
   const d = draft, o = d.orig;
   if (d.warn) return d.warn;
@@ -1154,95 +1154,119 @@ function hintText() {
   if (o?.recurring) return '↻ Inserita in automatico (ricorrente)';
   return '';
 }
-const ready = () => draftAmount() > 0 && !!draft.category;
-function okKeyHtml() {
-  return `<span class="okk__ic">✓</span><span class="okk__t">${draft.orig ? 'Salva' : 'Aggiungi'}</span>`;
+const dateLabel = (d) => (d === today() ? 'Oggi' : d === addDays(today(), -1) ? 'Ieri' : cap(dayLabel(d)));
+function wizHead(back) {
+  const d = draft;
+  return `<div class="wiz__head">
+    ${back ? `<button class="wiz__btn" data-action="w-go" data-v="${d.step - 1}" aria-label="Indietro">${ICON.back}</button>` : '<span class="wiz__btn wiz__btn--ghost"></span>'}
+    <div class="wiz__dots" aria-label="Passo ${d.step} di 3">${[1, 2, 3].map((i) => `<i class="${i === d.step ? 'on' : i < d.step ? 'done' : ''}"></i>`).join('')}</div>
+    <div class="row" style="flex:none;gap:6px">${d.orig && d.step === 3 ? `<button class="wiz__btn wiz__btn--del" data-action="d-delete" aria-label="Elimina">🗑</button>` : ''}<button class="wiz__btn" data-action="close-sheet" aria-label="Chiudi">${ICON.x}</button></div>
+  </div>`;
 }
 function renderAdd() {
-  const d = draft; const isIn = d.type === 'income';
-  const u = usage(d.type);
-  const combos = suggestions(d.type).filter((s) => s.label && s.isMerchant).slice(0, 4);
-  const comboOn = combos.find((s) => suggestionOn(s));
-  const list = cats().filter((c) => c.type === d.type).sort((a, b) => (u[b.id] || 0) - (u[a.id] || 0));
+  const s = draft.step;
+  return `<div class="wiz ${draft.anim || ''}">${s === 1 ? step1() : s === 2 ? step2() : step3()}</div>`;
+}
+function step1() {
+  const d = draft, isIn = d.type === 'income';
+  const t = today(), y = addDays(t, -1), other = d.date !== t && d.date !== y;
   const recent = recentAmounts();
-  const ppl = people();
-  const dateLbl = d.date === today() ? 'Oggi' : d.date === addDays(today(), -1) ? 'Ieri' : shortDate(d.date);
-  const mOn = (m) => normKey(m) === normKey(d.merchant);
-  return `
-  <div class="add">
-    <div class="sheet__head">
-      <div class="seg seg--type"><button class="${!isIn ? 'on' : ''}" data-action="d-type" data-v="expense">Spesa</button><button class="${isIn ? 'on' : ''}" data-action="d-type" data-v="income">Entrata</button></div>
-      <div class="row" style="flex:none;gap:8px">${d.orig ? `<button class="x x--del" data-action="d-delete" aria-label="Elimina">🗑</button>` : ''}<button class="x" data-action="close-sheet" aria-label="Chiudi">${ICON.x}</button></div>
-    </div>
-
+  return `${wizHead(false)}
+    <div class="wiz__type"><div class="seg"><button class="${!isIn ? 'on' : ''}" data-action="d-type" data-v="expense">Spesa</button><button class="${isIn ? 'on' : ''}" data-action="d-type" data-v="income">Entrata</button></div></div>
+    <h2 class="wiz__q">${isIn ? 'Quanto hai ricevuto?' : 'Quanto hai speso?'}</h2>
     <div class="amount">
-      <div class="amount__expr num" id="expr">${exprHtml()}</div>
       <div class="amount__v ${!d.amt ? 'zero' : ''} ${isIn ? 'in' : ''}" id="amt">${amountHtml()}</div>
       <div class="amount__hint ${d.warn ? 'warn' : ''}" id="hint">${esc(hintText())}</div>
       ${recent.length ? `<div class="recent" id="recent" ${d.amt ? 'hidden' : ''}>${recent.map((v) => `<button class="chip" data-action="d-amt" data-v="${v}">${fmt(v)}</button>`).join('')}</div>` : ''}
     </div>
-
-    <div class="add__label"><span>${isIn ? 'Che entrata è?' : 'Per cosa?'}</span>${d.category ? `<span class="muted">${esc(catById(d.category).name)}</span>` : ''}</div>
-    <div class="whats" id="whats">
-      ${combos.map((s) => { const c = catById(s.category); return `<button class="what what--combo ${suggestionOn(s) ? 'on' : ''}" style="--c:${c.color}" data-action="d-sug" data-k="${esc(s.key)}"><span class="what__c">${c.icon}</span><span class="what__l">${esc(s.label)}</span></button>`; }).join('')}
-      ${combos.length ? '<span class="wsep"></span>' : ''}
-      ${list.map((c) => `<button class="what ${d.category === c.id && !comboOn ? 'on' : ''}" style="--c:${c.color}" data-action="d-cat" data-v="${c.id}"><span class="what__c">${c.icon}</span><span class="what__l">${esc(c.name)}</span></button>`).join('')}
-      <button class="what what--new" data-action="cat-new"><span class="what__c">＋</span><span class="what__l">Nuova</span></button>
+    <div class="wiz__when">
+      <button class="pick ${d.date === t ? 'on' : ''}" data-action="d-date" data-v="${t}">Oggi</button>
+      <button class="pick ${d.date === y ? 'on' : ''}" data-action="d-date" data-v="${y}">Ieri</button>
+      <span class="pick datewrap ${other ? 'on' : ''}">📅 ${other ? shortDate(d.date) : 'Altro giorno'}<input type="date" id="dDate" value="${d.date}" aria-label="Scegli il giorno"></span>
     </div>
-    ${d.newCat ? `<div class="newcat"><input class="input" id="ncIcon" maxlength="4" placeholder="🙂" aria-label="Emoji"><input class="input" id="ncName" placeholder="Nome, es. Palestra" autocomplete="off" autocapitalize="sentences"><button class="btn btn--primary btn--sm" data-action="cat-create">Crea</button></div>` : ''}
-
-    <div class="dove">
-      <input class="minput ${d.merchant ? 'filled' : ''}" id="dMerchant" placeholder="${isIn ? '✎ Da chi' : '✎ Dove'}" value="${esc(d.merchant)}" autocomplete="off" autocapitalize="words" enterkeyhint="done">
-      <div class="chips" id="merchChips">${merchantChipsFor(mOn, false)}</div>
+    <div class="keypad keypad--wiz" id="keypad">${['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', 'del'].map((k) => `<button class="key" data-key="${k}" aria-label="${k === 'del' ? 'Cancella (tieni premuto per azzerare)' : k}">${k === 'del' ? ICON.del : k}</button>`).join('')}</div>
+    <button class="btn btn--primary btn--block wiz__cta ${isIn ? 'btn--income' : ''}" id="nextBtn" data-action="w-next" ${draftAmount() > 0 ? '' : 'disabled'}>${d.orig ? 'Fatto' : 'Avanti'}</button>`;
+}
+function step2() {
+  const d = draft, isIn = d.type === 'income';
+  const favs = suggestions(d.type).filter((s) => s.label && s.isMerchant).slice(0, 4);
+  const list = cats().filter((c) => c.type === d.type);
+  return `${wizHead(true)}
+    <button class="wiz__recap" data-action="w-go" data-v="1"><b class="num ${isIn ? 'in' : ''}">${fmt(draftAmount())}</b><span>${dateLabel(d.date)}</span></button>
+    <h2 class="wiz__q">${isIn ? 'Che entrata è?' : 'Per cosa?'}</h2>
+    ${favs.length ? `<div class="wiz__sub">I più frequenti</div>
+    <div class="favs">${favs.map((s) => { const c = catById(s.category); return `<button class="fav ${suggestionOn(s) ? 'on' : ''}" style="--c:${c.color}" data-action="d-sug" data-k="${esc(s.key)}"><span class="fav__ic">${c.icon}</span><span class="fav__t"><b>${esc(s.label)}</b><span>${esc(c.name)}</span></span></button>`; }).join('')}</div>` : ''}
+    <div class="wiz__sub">Categorie</div>
+    <div class="catgrid">${list.map((c) => `<button class="catbtn ${d.category === c.id ? 'on' : ''}" style="--c:${c.color}" data-action="d-cat" data-v="${c.id}"><span class="catbtn__ic">${c.icon}</span><span class="catbtn__name">${esc(c.name)}</span></button>`).join('')}<button class="catbtn catbtn--new" data-action="cat-new"><span class="catbtn__ic">＋</span><span class="catbtn__name">Nuova</span></button></div>
+    ${d.newCat ? `<div class="newcat"><input class="input" id="ncIcon" maxlength="4" placeholder="🙂" aria-label="Emoji"><input class="input" id="ncName" placeholder="Nome, es. Palestra" autocomplete="off" autocapitalize="sentences"><button class="btn btn--primary btn--sm" data-action="cat-create">Crea</button></div>` : ''}`;
+}
+function step3() {
+  const d = draft, isIn = d.type === 'income';
+  const c = catById(d.category);
+  const ppl = people();
+  const mOn = (m) => normKey(m) === normKey(d.merchant);
+  return `${wizHead(true)}
+    <div class="wrecap">
+      <button class="wrecap__amt num ${isIn ? 'in' : ''}" data-action="w-go" data-v="1">${fmt(draftAmount())}</button>
+      <div class="wrecap__row">
+        <button class="wrecap__chip" style="--c:${c.color}" data-action="w-go" data-v="2"><span>${c.icon}</span>${esc(c.name)}</button>
+        <button class="wrecap__chip" data-action="w-go" data-v="1">📅 ${dateLabel(d.date)}</button>
+      </div>
+      <div class="amount__hint ${d.warn ? 'warn' : ''}" id="hint">${esc(hintText())}</div>
     </div>
 
-    <div class="metas">
-      <span class="chip datewrap ${d.date !== today() ? 'on' : ''}">📅 ${dateLbl}<input type="date" id="dDate" value="${d.date}" aria-label="Data"></span>
-      <button class="chip" data-action="d-method">${METHODS[d.method] || '💳 Metodo'}</button>
-      <button class="chip ${d.note ? 'on' : ''}" data-action="d-note">📝 ${d.note ? esc(d.note.length > 14 ? d.note.slice(0, 13) + '…' : d.note) : 'Nota'}</button>
-      ${!isIn ? `<button class="chip ${d.split ? 'on' : ''}" data-action="d-split">÷ ${d.split?.person ? esc(d.split.person) : 'Dividi'}</button>` : ''}
-    </div>
-    ${d.showNote ? `<input class="input input--sm" id="dNote" placeholder="Nota, es. cena con Marco" value="${esc(d.note)}" autocomplete="off" enterkeyhint="done">` : ''}
-    ${d.split ? `<div class="split">
-      <div class="row"><input class="input input--sm" id="sPerson" placeholder="Con chi?" value="${esc(d.split.person || '')}" autocomplete="off" autocapitalize="words"></div>
-      ${ppl.length ? `<div class="chips chips--in" style="margin-top:8px">${ppl.map((p) => `<button class="chip ${d.split.person === p ? 'on' : ''}" data-action="s-person" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>` : ''}
-      <div class="row" style="margin-top:10px"><span class="small muted">La mia parte</span><div class="seg" style="flex:none"><button class="${d.split.mode !== 'custom' ? 'on' : ''}" data-action="s-mode" data-v="half">Metà</button><button class="${d.split.mode === 'custom' ? 'on' : ''}" data-action="s-mode" data-v="custom">Importo</button></div></div>
-      ${d.split.mode === 'custom' ? `<input class="input input--sm" id="sMine" inputmode="decimal" style="margin-top:8px" placeholder="Quanto è tuo? es. 10,00" value="${d.split.mine ? String(d.split.mine).replace('.', ',') : ''}">` : ''}
-      <div class="row" style="margin-top:10px"><span class="small muted">Ha pagato</span><div class="seg" style="flex:none"><button class="${d.split.paidBy !== 'them' ? 'on' : ''}" data-action="s-paid" data-v="me">Io</button><button class="${d.split.paidBy === 'them' ? 'on' : ''}" data-action="s-paid" data-v="them">${esc(d.split.person || 'L\'altro')}</button></div></div>
-    </div>` : ''}
+    <h2 class="wiz__q wiz__q--sm">${isIn ? 'Da chi?' : 'Dove?'} <span class="muted">facoltativo</span></h2>
+    <input class="input" id="dMerchant" placeholder="${isIn ? 'es. Velissima' : 'es. Aldi, Bar Pepe…'}" value="${esc(d.merchant)}" autocomplete="off" autocapitalize="words" enterkeyhint="done">
+    <div class="chips chips--wrap" id="merchChips">${merchantChipsFor(mOn, false)}</div>
 
-    <div class="keypad keypad--ok" id="keypad">
-      ${['1', '2', '3', 'del', '4', '5', '6', '+', '7', '8', '9', 'ok', ',', '0', '-'].map((k) => k === 'ok'
-        ? `<button class="key key--ok ${ready() ? 'ready' : ''} ${isIn ? 'in' : ''}" id="okKey" data-action="d-save" aria-label="${d.orig ? 'Salva' : 'Aggiungi'}">${okKeyHtml()}</button>`
-        : `<button class="key${/[+\-]|del/.test(k) ? ' key--op' : ''}" data-key="${k}" aria-label="${{ del: 'Cancella (tieni premuto per azzerare)', '-': 'Meno', '+': 'Più' }[k] || k}">${k === 'del' ? ICON.del : k === '-' ? '−' : k}</button>`).join('')}
+    <h2 class="wiz__q wiz__q--sm">${isIn ? 'Come l\'hai ricevuta?' : 'Come hai pagato?'}</h2>
+    <div class="seg seg--full">${Object.entries(METHODS).map(([k, l]) => `<button class="${d.method === k ? 'on' : ''}" data-action="d-method" data-v="${k}">${l}</button>`).join('')}</div>
+
+    <div class="opts">
+      ${d.showNote ? `<label class="small muted" for="dNote" style="margin:0 2px -2px">📝 Nota</label><input class="input" id="dNote" placeholder="Nota, es. cena con Marco" value="${esc(d.note)}" autocomplete="off" enterkeyhint="done">`
+      : `<button class="opt" data-action="d-note"><span>📝</span>Aggiungi una nota</button>`}
+      ${!isIn ? (d.split ? `<div class="split">
+        <div class="row" style="justify-content:space-between"><b class="small">÷ Divisa con</b><button class="chip" style="flex:none;height:30px" data-action="d-split">Togli</button></div>
+        <input class="input" id="sPerson" style="margin-top:8px" placeholder="Con chi?" value="${esc(d.split.person || '')}" autocomplete="off" autocapitalize="words">
+        ${ppl.length ? `<div class="chips chips--wrap" style="margin-top:8px">${ppl.map((p) => `<button class="chip ${d.split.person === p ? 'on' : ''}" data-action="s-person" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>` : ''}
+        <div class="row" style="margin-top:10px"><span class="small muted">La mia parte</span><div class="seg" style="flex:none"><button class="${d.split.mode !== 'custom' ? 'on' : ''}" data-action="s-mode" data-v="half">Metà</button><button class="${d.split.mode === 'custom' ? 'on' : ''}" data-action="s-mode" data-v="custom">Importo</button></div></div>
+        ${d.split.mode === 'custom' ? `<input class="input" id="sMine" inputmode="decimal" style="margin-top:8px" placeholder="Quanto è tuo? es. 10,00" value="${d.split.mine ? String(d.split.mine).replace('.', ',') : ''}">` : ''}
+        <div class="row" style="margin-top:10px"><span class="small muted">Ha pagato</span><div class="seg" style="flex:none"><button class="${d.split.paidBy !== 'them' ? 'on' : ''}" data-action="s-paid" data-v="me">Io</button><button class="${d.split.paidBy === 'them' ? 'on' : ''}" data-action="s-paid" data-v="them">${esc(d.split.person || 'L\'altro')}</button></div></div>
+      </div>` : `<button class="opt" data-action="d-split"><span>÷</span>Dividi con qualcuno</button>`) : ''}
     </div>
-  </div>`;
+
+    <div class="sheet__foot"><button class="btn btn--primary btn--block ${isIn ? 'btn--income' : ''}" id="saveBtn" data-action="d-save">${d.orig ? 'Salva modifiche' : isIn ? 'Aggiungi entrata' : 'Aggiungi spesa'} · ${fmt(draftAmount())}</button></div>`;
 }
 function merchantChipsFor(isOn, filter = true) {
   return merchantOptions(filter).map((m) => `<button class="chip ${isOn(m) ? 'on' : ''}" data-action="d-merchant" data-v="${esc(m)}">${esc(m)}</button>`).join('');
 }
 function rerenderAdd() {
   const p = $('#sheetPanel'); const st = p.scrollTop;
-  const wl = $('#whats')?.scrollLeft, ml = $('#merchChips')?.scrollLeft;
   const focus = document.activeElement?.id; const sel = focus && document.activeElement.selectionStart;
+  draft.anim = '';
   p.innerHTML = renderAdd(); p.scrollTop = st;
-  if (wl != null && $('#whats')) $('#whats').scrollLeft = wl;
-  if (ml != null && $('#merchChips')) $('#merchChips').scrollLeft = ml;
   if (focus && document.getElementById(focus)) { const el = document.getElementById(focus); el.focus(); try { el.setSelectionRange(sel, sel); } catch (e) {} }
 }
-function goPage() { rerenderAdd(); } // compatibilità con la versione a due schermate
-function revealSelected() {
-  const on = $('#whats .what.on'); const row = $('#whats');
-  if (on && row && (on.offsetLeft < row.scrollLeft || on.offsetLeft + on.offsetWidth > row.scrollLeft + row.clientWidth)) row.scrollTo({ left: on.offsetLeft - 16, behavior: 'smooth' });
+function goStep(n) {
+  readDraftInputs();
+  if (n === draft.step) return;
+  draft.anim = n > draft.step ? 'slide-l' : 'slide-r'; draft.warn = '';
+  draft.step = n;
+  const p = $('#sheetPanel'); p.innerHTML = renderAdd(); p.scrollTop = 0;
+}
+function goPage(n) { goStep(n); }
+function revealSelected() {}
+function nextFromAmount() {
+  if (!(draftAmount() > 0)) return warn('Scrivi l\'importo', $('#amt'));
+  goStep(draft.orig || draft.category ? 3 : 2); // in modifica (o se la categoria c'è già) torna al riepilogo
 }
 function updateAmountOnly() {
   const a = $('#amt'); if (!a) return;
   draft.warn = '';
   a.innerHTML = amountHtml(); a.classList.toggle('zero', !draft.amt);
-  const ex = $('#expr'); if (ex) ex.innerHTML = exprHtml();
   const rc = $('#recent'); if (rc) rc.hidden = !!draft.amt;
   const h = $('#hint'); h.textContent = hintText(); h.classList.remove('warn');
-  $('#okKey')?.classList.toggle('ready', ready());
+  const b = $('#nextBtn'); if (b) b.disabled = !(draftAmount() > 0);
 }
 let delTimer = null, delLong = false;
 document.addEventListener('pointerdown', (e) => {
@@ -1253,16 +1277,14 @@ document.addEventListener('pointerdown', (e) => {
 document.addEventListener('pointerup', () => clearTimeout(delTimer));
 document.addEventListener('pointercancel', () => clearTimeout(delTimer));
 function pressKey(k) {
-  if (k === 'del' && delLong) { delLong = false; return; } // già azzerato tenendo premuto
+  if (draft.step !== 1) return;
+  if (k === 'del' && delLong) { delLong = false; return; }
   let a = draft.amt;
   const last = a.split(/[+-]/).pop();
   if (k === 'del') a = a.slice(0, -1);
   else if (k === 'C') a = '';
-  else if (k === '=') { const v = draftAmount(); a = v > 0 ? String(v).replace('.', ',') : ''; }
-  else if (k === '+' || k === '-') {
-    if (!a) return shake();
-    a = a.replace(/[+\-,]$/, '') + k;
-  } else if (k === ',') { if (!last.includes(',')) a += last ? ',' : '0,'; }
+  else if (k === '+' || k === '-' || k === '=') return;
+  else if (k === ',') { if (!last.includes(',')) a += last ? ',' : '0,'; }
   else {
     const [i, d] = last.split(',');
     if (d !== undefined && d.length >= 2) return shake();
@@ -1283,8 +1305,9 @@ function readDraftInputs() {
 function saveDraft() {
   readDraftInputs();
   const d = draft; const amount = round2(draftAmount());
-  if (!(amount > 0)) return warn('Scrivi l\'importo', $('#amt'));
-  if (!d.category) return warn(d.type === 'income' ? 'Scegli che entrata è 👇' : 'Scegli per cosa hai speso 👇', $('#whats'));
+  if (d.step === 1) return nextFromAmount();
+  if (!(amount > 0)) return goStep(1);
+  if (!d.category) return goStep(2);
   let split = null;
   if (d.type === 'expense' && d.split) {
     if (!d.split.person) { warn('Scrivi con chi hai diviso'); setTimeout(() => $('#sPerson')?.focus(), 50); return; }
@@ -1406,7 +1429,9 @@ document.addEventListener('click', async (e) => {
     // Inserimento
     case 'd-type': readDraftInputs(); if (draft.type !== v) { draft.type = v; draft.category = null; draft.merchant = ''; draft.note = ''; if (v === 'income') draft.split = null; } rerenderAdd(); break;
     case 'd-page': goPage(Number(v)); break;
-    case 'd-amt': draft.amt = amtStr(Number(v)); vibrate(5); updateAmountOnly(); break;
+    case 'w-go': goStep(Number(v)); break;
+    case 'w-next': nextFromAmount(); break;
+    case 'd-amt': draft.amt = amtStr(Number(v)); vibrate(5); updateAmountOnly(); setTimeout(nextFromAmount, 180); break;
     case 'cat-new': readDraftInputs(); draft.newCat = !draft.newCat; rerenderAdd(); setTimeout(() => $('#ncName')?.focus(), 50); break;
     case 'cat-create': {
       const name = $('#ncName').value.trim(); if (!name) { $('#ncName').focus(); return; }
@@ -1414,7 +1439,7 @@ document.addEventListener('click', async (e) => {
       const list = state.data.settings.categories;
       const c = { id: 'c-' + uid(), name: cap(name), type: draft.type, icon: $('#ncIcon').value.trim() || '•', color: PAL[list.length % PAL.length] };
       state.data.settings.categories = [...list.filter((x) => x.id !== 'altro' && x.id !== 'altro-in'), c, ...list.filter((x) => x.id === 'altro' || x.id === 'altro-in')];
-      touchSettings(); readDraftInputs(); draft.category = c.id; draft.newCat = false; draft.catOpen = false; rerenderAdd(); toast(`Categoria "${c.name}" creata`); break;
+      touchSettings(); readDraftInputs(); draft.category = c.id; draft.newCat = false; goStep(3); toast(`Categoria "${c.name}" creata`); break;
     }
     case 'd-sug': {
       readDraftInputs();
@@ -1428,9 +1453,9 @@ document.addEventListener('click', async (e) => {
         draft.warn = '';
         if (!draft.amt && s.fixed) draft.amt = String(s.fixed).replace('.', ',');
       }
-      vibrate(5); rerenderAdd(); revealSelected(); break;
+      vibrate(5); if (draft.category) goStep(3); else rerenderAdd(); break;
     }
-    case 'd-cat': { readDraftInputs(); draft.category = v; draft.newCat = false; draft.warn = ''; const uc = draft.merchant && usualCategory(draft.merchant, draft.type); if (uc && uc !== v) draft.merchant = ''; vibrate(5); rerenderAdd(); break; }
+    case 'd-cat': { readDraftInputs(); draft.category = v; draft.newCat = false; draft.warn = ''; const uc = draft.merchant && usualCategory(draft.merchant, draft.type); if (uc && uc !== v) draft.merchant = ''; vibrate(5); goStep(3); break; }
     case 'd-note': readDraftInputs(); draft.showNote = !draft.showNote || !!draft.note; rerenderAdd(); setTimeout(() => $('#dNote')?.focus(), 30); break;
     case 'd-catopen': readDraftInputs(); draft.catOpen = true; rerenderAdd(); break;
     case 'd-merchant': {
@@ -1438,7 +1463,7 @@ document.addEventListener('click', async (e) => {
       if (draft.merchant && !draft.category) draft.category = usualCategory(v, draft.type);
       vibrate(5); rerenderAdd(); break;
     }
-    case 'd-date': readDraftInputs(); draft.date = v; rerenderAdd(); break;
+    case 'd-date': readDraftInputs(); draft.date = v; vibrate(5); rerenderAdd(); break;
     case 'd-method': { readDraftInputs(); const k = Object.keys(METHODS); draft.method = v || k[(k.indexOf(draft.method) + 1) % k.length]; rerenderAdd(); break; }
     case 'd-split': readDraftInputs(); draft.split = draft.split ? null : { person: '', mode: 'half', paidBy: 'me', mine: 0 }; rerenderAdd(); if (draft.split) setTimeout(() => $('#sPerson')?.focus(), 50); break;
     case 's-person': readDraftInputs(); draft.split.person = v; rerenderAdd(); break;
@@ -1539,7 +1564,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === '+' || e.key === '-') { e.preventDefault(); pressKey(e.key); }
   else if (e.key === '=') { e.preventDefault(); pressKey('='); }
   else if (e.key === 'Backspace') { e.preventDefault(); pressKey('del'); }
-  else if (e.key === 'Enter') { e.preventDefault(); saveDraft(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (draft.step === 1) nextFromAmount(); else if (draft.step === 3) saveDraft(); }
 });
 window.addEventListener('hashchange', () => { closeSheet(); render(); window.scrollTo(0, 0); });
 window.addEventListener('online', () => syncNow());
