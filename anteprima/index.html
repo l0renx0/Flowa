@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Flowa · anteprima</title>
+  <meta name="description" content="Le tue spese e le tue entrate, in un attimo.">
+  <meta name="theme-color" content="#f4f4f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0a0a0d" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Flowa">
+  
+  <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <script>
+    // Tema scelto dall'utente (prima di disegnare la pagina, per evitare lampi).
+    try { const t = localStorage.getItem('flowa:theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="app">
+    <nav class="tabs" aria-label="Sezioni">
+      <div class="tabs__brand"><span class="logo" aria-hidden="true"></span>Flowa</div>
+      <a class="tab" href="#/home" data-tab="home"><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg><span>Home</span></a>
+      <a class="tab" href="#/movimenti" data-tab="movimenti"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Movimenti</span></a>
+      <button class="tab tab--add" type="button" data-action="add" aria-label="Aggiungi movimento"><span class="plus"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>Aggiungi</span></button>
+      <a class="tab" href="#/analisi" data-tab="analisi"><svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-7"/></svg><span>Resoconti</span></a>
+      <a class="tab" href="#/altro" data-tab="altro"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg><span>Altro</span></a>
+    </nav>
+
+    <main class="main">
+      <div class="previewbar">👀 <b>Anteprima</b> della nuova schermata per aggiungere. Lavora su una <b>copia</b> dei tuoi dati: qui niente viene salvato davvero.</div>
+      <div class="fresh" id="fresh" hidden>
+        <span>✨ Nuova versione di Flowa</span>
+        <button type="button" data-action="reload">Aggiorna</button>
+      </div>
+      <div id="view" class="view"></div>
+    </main>
+  </div>
+
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet__backdrop" data-action="close-sheet"></div>
+    <div class="sheet__panel" role="dialog" aria-modal="true" id="sheetPanel"></div>
+  </div>
+
+  <div class="dialog" id="dialog" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="assets/js/app.js"></script>
+  <script src="assets/js/importa.js"></script>
+</body>
+</html>
